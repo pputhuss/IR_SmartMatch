@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from matcher import rank_companies
 import json
@@ -6,6 +6,11 @@ from pathlib import Path
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route("/")                          
+def frontend():                         
+    return send_from_directory("../frontend", "index.html")
+                                        
 
 def load_companies():
     path = Path(__file__).parent.parent / "data" / "companies.json"
