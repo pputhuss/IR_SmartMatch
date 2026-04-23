@@ -42,7 +42,7 @@ Main packages used:
 
 All listed in requirements.txt.
 
-## Code Authorship
+## Code Statement
 
 All code in this project was written by Prathik Puthussery. No code was copied from external repositories. The external libraries (flask, sentence-transformers, pymupdf, scikit-learn) were used as is without modification.
 
