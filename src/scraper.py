@@ -1,20 +1,3 @@
-"""
-scraper.py - IR Smart Match Company Data Scraper
--------------------------------------------------
-Pipeline:
-  1. Reads companies.json (names only, empty descriptions)
-  2. For each company, scrapes a rich description from:
-       a. Wikipedia API
-       b. Google search snippet
-       c. Company careers/about page
-  3. Writes enriched descriptions back to companies.json
-
-USAGE:
-  python scraper.py                          # enrich all companies
-  python scraper.py --skip-existing          # skip already-scraped ones
-  python scraper.py --company "Lockheed"     # test a single company
-"""
-
 import json
 import time
 import re
@@ -41,7 +24,7 @@ DATA_PATH = Path(__file__).parent.parent / "data" / "companies.json"
 DELAY = 1.5
 
 
-# Source 1: Wikipedia
+#source 1: wikipedia searches for the company and returns the first paragraph
 def fetch_wikipedia(company_name: str) -> str | None:
     search_url = "https://en.wikipedia.org/w/api.php"
     params = {
@@ -58,6 +41,7 @@ def fetch_wikipedia(company_name: str) -> str | None:
         if not results:
             return None
 
+        #get the page title from the top search result
         title = results[0]["title"]
         extract_params = {
             "action": "query",
@@ -74,6 +58,7 @@ def fetch_wikipedia(company_name: str) -> str | None:
         extract = page.get("extract", "").strip()
         if not extract:
             return None
+        #return only the first paragraph capped at 500 chars
         first_para = extract.split("\n\n")[0]
         return first_para[:500].strip()
 
@@ -82,7 +67,7 @@ def fetch_wikipedia(company_name: str) -> str | None:
         return None
 
 
-# Source 2: Google snippet
+#source 2: google snippet tries to grab a short description from search results
 def fetch_google_snippet(company_name: str) -> str | None:
     query = f"{company_name} company engineering careers"
     url = f"https://www.google.com/search?q={requests.utils.quote(query)}&num=3"
@@ -91,12 +76,14 @@ def fetch_google_snippet(company_name: str) -> str | None:
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
+        #check for a knowledge panel description first
         kp = soup.find("div", {"data-attrid": "description"})
         if kp:
             text = kp.get_text(" ", strip=True)
             if len(text) > 60:
                 return text[:400]
 
+        #fall back to organic result snippets
         for span in soup.select("div.VwiC3b, span.aCOpRe"):
             text = span.get_text(" ", strip=True)
             if len(text) > 80:
@@ -108,7 +95,7 @@ def fetch_google_snippet(company_name: str) -> str | None:
         return None
 
 
-# Source 3: Company careers/about page
+#source 3: company careers or about page tries common URL patterns
 def fetch_careers_page(company_name: str) -> str | None:
     slug = re.sub(r"[^a-z0-9]", "", company_name.lower().replace("&", "and"))
     candidates = [
@@ -122,8 +109,10 @@ def fetch_careers_page(company_name: str) -> str | None:
             if r.status_code != 200:
                 continue
             soup = BeautifulSoup(r.text, "html.parser")
+            #remove nav footer scripts so we only parse body content
             for tag in soup(["nav", "footer", "script", "style", "header"]):
                 tag.decompose()
+            #return the first paragraph longer than 120 chars
             for p in soup.find_all("p"):
                 text = p.get_text(" ", strip=True)
                 if len(text) > 120:
@@ -133,7 +122,7 @@ def fetch_careers_page(company_name: str) -> str | None:
     return None
 
 
-# Master fetch: tries sources in order
+#tries all three sources in order and returns the first good result
 def get_company_description(company_name: str) -> str:
     print(f"  Scraping: {company_name}")
 
@@ -158,11 +147,13 @@ def get_company_description(company_name: str) -> str:
     return ""
 
 
+#loads the companies list from the json file
 def load_companies(path: Path) -> list[dict]:
     with open(path) as f:
         return json.load(f)
 
 
+#saves the updated companies list back to the json file
 def save_companies(companies: list[dict], path: Path):
     with open(path, "w") as f:
         json.dump(companies, f, indent=4)
@@ -170,13 +161,14 @@ def save_companies(companies: list[dict], path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="IR Smart Match — Company Scraper")
+    parser = argparse.ArgumentParser(description="IR Smart Match Company Scraper")
     parser.add_argument("--company", metavar="NAME", help="Test a single company")
     parser.add_argument("--skip-existing", action="store_true",
                         help="Skip companies that already have a description")
     parser.add_argument("--output", metavar="PATH", default=str(DATA_PATH))
     args = parser.parse_args()
 
+    #if a single company name is passed just test that one and exit
     if args.company:
         desc = get_company_description(args.company)
         print(f"\nResult:\n{desc}")
@@ -189,6 +181,7 @@ def main():
     for company in companies:
         name = company["company"]
 
+        #skip companies that already have a description if flag is set
         if args.skip_existing and company.get("description", "").strip():
             print(f"  Skipping (exists): {name}")
             continue
@@ -196,7 +189,7 @@ def main():
         desc = get_company_description(name)
         company["description"] = desc
 
-        # Save after every company so progress isn't lost if interrupted
+        #save after every company so progress isnt lost if interrupted
         save_companies(companies, out_path)
         time.sleep(DELAY)
 
