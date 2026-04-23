@@ -2,3 +2,5 @@ sentence-transformers
 scikit-learn
 beautifulsoup4
 requests
+flask
+pymupdf
